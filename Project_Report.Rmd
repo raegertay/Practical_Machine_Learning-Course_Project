@@ -1,0 +1,63 @@
+---
+title: "Practical Machine Learning - Project Report"
+author: "Raeger Tay"
+date: "20 August 2015"
+output: 
+  html_document: 
+    keep_md: yes
+    toc: yes
+---
+
+# Dataset
+[Training Data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)  
+[Test Data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)  
+[Data Reference](http://groupware.les.inf.puc-rio.br/har)  
+
+# Data Cleaning
+The training dataset is first loaded, and empty cells are filled with NA. Columns 1 to 7 contains participants' names, timestamp and window identifier. These are metadata and therefore are removed. 
+```{r}
+training <- read.csv(file = "pml-training.csv", na.strings = c("", "NA"))
+names(training)[1:7]
+training <- training[, -(1:7)]
+```
+
+<br>
+Next, it is noted that there are multiple columns with high percentage of NAs. These columns contain summary statistics like kurtosis and skewness for each window. These columns are also removed. This leaves us with 19,622 observations and 52 variables. The 53th column contains the outcome.
+```{r}
+na.count <- sapply(training, function(x) {sum(is.na(x))/nrow(training)})
+training <- training[, na.count == 0] # Remove summary statistics
+dim(training)
+```
+
+<br>
+The training set is partitioned into a sub-training set and a sub-test set on a 70:30 split. The model will be trained using the sub-training set and then test on the sub-test set.
+```{r, message=FALSE}
+library(caret)
+inTrain <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+sub.training <- training[inTrain, ]
+sub.test <- training[-inTrain, ]
+```
+ 
+# Prediction Model
+The Breiman's random forest algorithm is used for the training of our model. It can be called using the function randomForest() from the "randomForest" package. Using the trained model, the outcome is predicted on the sub.test dataset. The confusion matrix is shown. 
+```{r, message=FALSE}
+library(randomForest)
+modelFit <- randomForest(classe ~ ., data = sub.training)
+sub.test.pred <- predict(modelFit, sub.test[,-53])
+c <- confusionMatrix(sub.test.pred, sub.test$classe)
+c
+```
+The accuracy predicted on the sub.test set is `r signif(c$overall[1],3)`. The out-of-sample error is then `r signif(1-c$overall[1],3)`. It is noted that no cross-validation is required for random forest as it is already built inside the algorithm.
+
+# Prediction Results
+Now, given the good accuracy on our out-of-sample dataset, the model will be used to predict the answers for the test set. The test set is subjected to the same cleaning process as our training set.
+```{r}
+test <- read.csv(file = "pml-testing.csv", na.strings = c("", "NA"))
+test <- test[, -(1:7)] # Remove meta-data
+na.count <- sapply(test, function(x) {sum(is.na(x))/nrow(test)})
+test <- test[, na.count == 0] # Remove summary statistics
+test.pred <- predict(modelFit, test[,-53])
+as.character(test.pred)
+```
+
+The predictions scored a result of 20/20. 
